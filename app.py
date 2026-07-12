@@ -1,89 +1,66 @@
 import streamlit as st
+import qrcode
+from io import BytesIO
 from supabase import create_client
-from datetime import datetime, timezone
-from streamlit_autorefresh import st_autorefresh
+import requests
+from bs4 import BeautifulSoup
 
-# Configuração
-url = st.secrets["URL_SUPABASE"]
-key = st.secrets["KEY_SUPABASE"]
-supabase = create_client(url, key)
+# ... (Mantenha o resto das suas configurações de Supabase e Estilo intactas)
 
-# Atualiza a página automaticamente a cada 1 segundo
-st_autorefresh(interval=1000, key="datarefresh")
-
-st.set_page_config(page_title="Painel de Administração", layout="wide")
-st.title("🛡️ Painel de Controle em Tempo Real")
-
-# --- LOGIN ---
-if "logado" not in st.session_state: st.session_state["logado"] = False
-
-if not st.session_state["logado"]:
-    senha = st.text_input("Senha:", type="password")
-    if st.button("Entrar") and senha == "1234":
-        st.session_state["logado"] = True
-        st.rerun()
-else:
-    if st.button("Sair"):
-        st.session_state["logado"] = False
-        st.rerun()
-
-    # --- SEÇÃO 1: PEDIDOS WEB PENDENTES ---
-    st.subheader("📥 Pedidos Web Recebidos")
-    pedidos_pendentes = supabase.table("pedidos_pendentes").select("*").eq("status", "pendente").execute().data
+# --- FUNÇÃO DE BUSCA OTIMIZADA ---
+def buscar_musicas(termo):
+    # O Nephobox exige que o cabeçalho pareça um navegador real
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    url_base = "https://www.nephobox.com/portuguese/main?category=all&path=%2FKARAOKE"
     
-    if pedidos_pendentes:
-        for p in pedidos_pendentes:
-            col_a, col_b = st.columns([4, 1])
-            col_a.write(f"🎤 **{p['cantor']}** - 🎵 {p['musica']}")
-            if col_b.button("Aprovar", key=f"aprove_{p['id']}"):
-                # Adiciona na tabela oficial de prestadores
-                supabase.table("prestadores").insert({
-                    "nome_prestador": p['cantor'],
-                    "referencia_pagamento": p['musica'],
-                    "status_pagamento": False
-                }).execute()
-                # Remove da lista de pendentes
-                supabase.table("pedidos_pendentes").delete().eq("id", p['id']).execute()
-                st.rerun()
-    else:
-        st.info("Nenhum pedido novo no momento.")
-
-    st.divider()
-
-    # --- SEÇÃO 2: FILA DE PRESTADORES ATIVOS ---
-    st.subheader("🎤 Fila de Prestadores")
-    prestadores = supabase.table("prestadores").select("*").execute().data
-
-    # Cabeçalho da Tabela
-    c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
-    c1.write("**Prestador**"); c2.write("**Referência/Música**")
-    c3.write("**Pagamento**"); c4.write("**Tempo Restante**")
-
-    for p in prestadores:
-        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
-        col1.write(p['nome_prestador'])
-        col2.write(p.get('referencia_pagamento', ''))
+    try:
+        response = requests.get(url_base, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.content, 'html.parser')
         
-        status = p['status_pagamento']
-        inicio_str = p.get('inicio_servico')
+        # O Nephobox costuma listar arquivos em tags específicas. 
+        # Vamos buscar todos os textos que possam ser nomes de músicas/arquivos
+        # Se o site usa JS, a lista pode estar dentro de um JSON escondido na página
+        resultados = []
+        # Tenta pegar elementos comuns de lista de arquivos
+        for item in soup.find_all(['a', 'div', 'span'], class_=lambda x: x and 'name' in x):
+            if termo.lower() in item.text.lower():
+                resultados.append(item.text.strip())
         
-        if status and inicio_str:
-            inicio = datetime.fromisoformat(inicio_str.replace('Z', '+00:00'))
-            agora = datetime.now(timezone.utc)
-            restante = 7200 - (agora - inicio).total_seconds()
+        # Se não encontrar nada via tags específicas, busca no texto puro da página
+        if not resultados:
+            texto_pagina = soup.get_text()
+            # Lógica simples para extrair linhas que contenham o termo
+            linhas = [l.strip() for l in texto_pagina.split('\n') if termo.lower() in l.lower()]
+            resultados = linhas
+            
+        return list(set(resultados[:10])) if resultados else ["Nenhuma música encontrada (Verifique se o site requer login)."]
+    except Exception as e:
+        return [f"Erro ao acessar a nuvem: {e}"]
 
-            if restante > 0:
-                m, s = divmod(int(restante), 60)
-                col3.write("✅ SIM")
-                col4.write(f"⏳ {m:02d}m {s:02d}s")
-            else:
-                supabase.table("prestadores").update({"status_pagamento": False, "inicio_servico": None}).eq("id", p['id']).execute()
-                st.rerun()
-        else:
-            col3.write("❌ NÃO")
-            if col4.button("Pagar", key=f"btn_{p['id']}"):
-                supabase.table("prestadores").update({
-                    "status_pagamento": True, 
-                    "inicio_servico": datetime.now(timezone.utc).isoformat()
-                }).eq("id", p['id']).execute()
-                st.rerun()
+# --- PAINEL (Onde a busca acontece) ---
+else:
+    st.title(f"🎤 Bem-vindo, {st.session_state['nome']}!")
+    
+    # ... (Seu código de Link e QR Code aqui)
+
+    # Interface de Busca e Adição
+    st.markdown('<div class="big-box">', unsafe_allow_html=True)
+    st.subheader("🔍 Pesquisar na Nuvem")
+    termo = st.text_input("Nome da Música:")
+    
+    # Botão de busca com estado
+    if st.button("Buscar na Biblioteca"):
+        with st.spinner('Procurando na nuvem...'):
+            st.session_state["resultados"] = buscar_musicas(termo)
+    
+    # Exibir resultados
+    if "resultados" in st.session_state:
+        selecionada = st.selectbox("Selecione a música desejada:", st.session_state["resultados"])
+        if st.button("Adicionar à Lista"):
+            st.success(f"Adicionando: {selecionada}...")
+            # Aqui você inseriria no Supabase
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ... (Resto do código)
