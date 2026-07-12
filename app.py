@@ -17,7 +17,7 @@ if "logado" not in st.session_state:
 if not st.session_state["logado"]:
     senha = st.text_input("Senha:", type="password")
     if st.button("Entrar"):
-        if senha == "donagay0804241708": # Sua senha
+        if senha == "1234": # Sua senha
             st.session_state["logado"] = True
             st.rerun()
 else:
