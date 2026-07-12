@@ -6,7 +6,7 @@ st.set_page_config(page_title="Painel de Administração", layout="centered")
 st.title("🛡️ Painel de Controle - Administração")
 
 # Configuração da senha
-SENHA_ADMIN = "1234" # Mude aqui para a senha que você desejar
+SENHA_ADMIN = "donagay0804241708" # Mude aqui para a senha que você desejar
 
 def pagina_de_login():
     st.subheader("Acesso Restrito")
