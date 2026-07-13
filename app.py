@@ -8,11 +8,11 @@ url = st.secrets["URL_SUPABASE"]
 key = st.secrets["KEY_SUPABASE"]
 supabase = create_client(url, key)
 
-# Atualiza a página automaticamente a cada 1 segundo
-st_autorefresh(interval=1000, key="datarefresh")
+# Atualiza a página a cada 5 segundos (1 segundo é muito rápido e causa instabilidade nos cliques)
+st_autorefresh(interval=5000, key="datarefresh")
 
 st.set_page_config(page_title="Painel de Administração", layout="wide")
-st.title("🛡️ Painel de Controle em Tempo Real")
+st.title("🛡️ Painel de Controle")
 
 # --- LOGIN ---
 if "logado" not in st.session_state: st.session_state["logado"] = False
@@ -22,14 +22,16 @@ if not st.session_state["logado"]:
     if st.button("Entrar") and senha == "1234":
         st.session_state["logado"] = True
         st.rerun()
-else:
-    if st.button("Sair"):
-        st.session_state["logado"] = False
-        st.rerun()
+    st.stop() # Para a execução se não estiver logado
 
-    # --- SEÇÃO 1: PEDIDOS WEB PENDENTES ---
-    st.subheader("📥 Pedidos Web Recebidos")
-    # Buscando pedidos pendentes
+# --- ÁREA LOGADA ---
+if st.button("Sair"):
+    st.session_state["logado"] = False
+    st.rerun()
+
+# --- SEÇÃO 1: PEDIDOS WEB ---
+st.subheader("📥 Pedidos Web Recebidos")
+try:
     pedidos = supabase.table("pedidos_pendentes").select("*").eq("status", "pendente").execute().data
     
     if pedidos:
@@ -37,33 +39,31 @@ else:
             col_a, col_b = st.columns([4, 1])
             col_a.write(f"🎤 **{p.get('cantor', 'Sem nome')}** - 🎵 {p.get('musica', 'Sem nome')}")
             if col_b.button("Aprovar", key=f"aprove_{p['id']}"):
-                # Criar o prestador com dados necessários para o login dele funcionar
                 slug = p['cantor'].lower().replace(" ", "-")
                 supabase.table("prestadores").insert({
                     "nome_prestador": p['cantor'],
                     "referencia_pagamento": p['musica'],
                     "status_pagamento": False,
                     "slug_unico": slug,
-                    "senha_acesso": "1234", # Senha padrão
+                    "senha_acesso": "1234",
                     "status_acesso": "ativo"
                 }).execute()
-                
-                # Atualiza o status do pedido para 'processado' ou deleta
                 supabase.table("pedidos_pendentes").delete().eq("id", p['id']).execute()
                 st.rerun()
     else:
-        st.info("Nenhum pedido novo no momento.")
+        st.info("Nenhum pedido novo.")
+except Exception as e:
+    st.error(f"Erro ao buscar pedidos: {e}")
 
-    st.divider()
+st.divider()
 
-    # --- SEÇÃO 2: FILA DE PRESTADORES ATIVOS ---
-    st.subheader("🎤 Fila de Prestadores")
+# --- SEÇÃO 2: FILA DE PRESTADORES ---
+st.subheader("🎤 Fila de Prestadores")
+try:
     prestadores = supabase.table("prestadores").select("*").execute().data
-
     if prestadores:
-        c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
-        c1.write("**Prestador**"); c2.write("**Referência**")
-        c3.write("**Pagamento**"); c4.write("**Tempo**")
+        header1, header2, header3, header4 = st.columns([2, 2, 1, 1])
+        header1.write("**Prestador**"); header2.write("**Ref.**"); header3.write("**Pagamento**"); header4.write("**Tempo**")
 
         for p in prestadores:
             col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
@@ -77,7 +77,6 @@ else:
                 inicio = datetime.fromisoformat(inicio_str.replace('Z', '+00:00'))
                 agora = datetime.now(timezone.utc)
                 restante = 7200 - (agora - inicio).total_seconds()
-
                 if restante > 0:
                     m, s = divmod(int(restante), 60)
                     col3.write("✅ SIM")
@@ -95,3 +94,5 @@ else:
                     st.rerun()
     else:
         st.write("Nenhum prestador cadastrado.")
+except Exception as e:
+    st.error(f"Erro ao buscar prestadores: {e}")
