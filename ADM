@@ -31,7 +31,6 @@ if st.button("🔄 Atualizar Pedidos"):
     st.rerun()
 
 try:
-    # Busca pedidos pendentes
     pedidos = supabase.table("pedidos_pendentes").select("*").eq("status", "pendente").execute().data
     
     if pedidos:
@@ -42,7 +41,7 @@ try:
             if col_b.button("Aprovar", key=f"aprove_{p['id']}"):
                 slug = p['cantor'].lower().replace(" ", "-")
                 
-                # Inserção usando chaves em minúsculas (padrão do seu banco)
+                # Inserção usando chaves em minúsculas (exatamente como no seu banco)
                 supabase.table("prestadores").insert({
                     "nome": p['cantor'], 
                     "sobrenome": "",    
@@ -76,15 +75,18 @@ try:
         for p in prestadores:
             col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
             
-            # Tenta ler as chaves em minúsculas (nome e sobrenome)
-            nome_banco = p.get('nome') or p.get('Nome') or ""
-            sobrenome_banco = p.get('sobrenome') or p.get('Sobrenome') or ""
+            # Leitura direta das colunas do banco (minúsculas)
+            nome_b = p.get('nome') or ""
+            sobrenome_b = p.get('sobrenome') or ""
             
-            nome_completo = f"{nome_banco} {sobrenome_banco}".strip()
+            # Se nome e sobrenome estiverem vazios, exibe o slug_unico como identificador
+            if not nome_b and not sobrenome_b:
+                display_nome = p.get('slug_unico', f"ID: {p.get('id')}")
+            else:
+                display_nome = f"{nome_b} {sobrenome_b}".strip()
             
-            # Se ainda estiver vazio, mostra o slug ou um aviso
-            col1.write(nome_completo if nome_completo else f"ID: {p.get('id')}")
-            col2.write(p.get('referencia_pagamento', ''))
+            col1.write(display_nome) 
+            col2.write(str(p.get('referencia_pagamento', '')))
             
             status = p.get('status_pagamento', False)
             
