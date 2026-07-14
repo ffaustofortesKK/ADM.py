@@ -41,7 +41,7 @@ try:
             sobrenome = p.get('Sobrenome') if p.get('Sobrenome') else ""
             
             # Junta os nomes, se ambos estiverem vazios usa o slug_unico
-            nome_completo = f"{nome} {sobrenome}".strip()
+            nome_completo = f"{Nome} {sobrenome}".strip()
             nome_exibir = nome_completo if nome_completo != "" else p.get('slug_unico', 'Sem Nome')
             
             col1.write(f"**{nome_exibir}**")
