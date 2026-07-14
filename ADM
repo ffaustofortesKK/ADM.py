@@ -20,15 +20,55 @@ if not st.session_state["logado"]:
         st.rerun()
     st.stop()
 
+# --- SAIR ---
+if st.sidebar.button("Sair"):
+    st.session_state["logado"] = False
+    st.rerun()
+
+# --- SEÇÃO 1: PEDIDOS WEB ---
+st.subheader("📥 Pedidos Web Pendentes")
+if st.button("🔄 Atualizar Pedidos"):
+    st.rerun()
+
+try:
+    # Busca pedidos pendentes
+    pedidos = supabase.table("pedidos_pendentes").select("*").eq("status", "pendente").execute().data
+    
+    if pedidos:
+        for p in pedidos:
+            col_a, col_b = st.columns([4, 1])
+            col_a.write(f"🎤 **{p.get('cantor', 'Sem nome')}** - 🎵 {p.get('musica', 'Sem nome')}")
+            
+            if col_b.button("Aprovar", key=f"aprove_{p['id']}"):
+                slug = p['cantor'].lower().replace(" ", "-")
+                
+                # Inserção usando chaves em minúsculas (padrão do seu banco)
+                supabase.table("prestadores").insert({
+                    "nome": p['cantor'], 
+                    "sobrenome": "",    
+                    "referencia_pagamento": p['musica'],
+                    "status_pagamento": False,
+                    "slug_unico": slug
+                }).execute()
+                
+                supabase.table("pedidos_pendentes").delete().eq("id", p['id']).execute()
+                st.success(f"Prestador {p['cantor']} adicionado!")
+                st.rerun()
+    else:
+        st.info("Nenhum pedido novo.")
+except Exception as e:
+    st.error(f"Erro ao buscar pedidos: {e}")
+
+st.divider()
+
 # --- SEÇÃO 2: FILA DE PRESTADORES ---
 st.subheader("🎤 Fila de Prestadores")
 if st.button("🔄 Atualizar Fila"):
     st.rerun()
 
 try:
-    # Busca todos os prestadores
+    # Busca prestadores
     prestadores = supabase.table("prestadores").select("*").execute().data
-    
     if prestadores:
         header1, header2, header3, header4 = st.columns([2, 2, 1, 1])
         header1.write("**Prestador**"); header2.write("**Ref.**"); header3.write("**Status**"); header4.write("**Ação**")
@@ -36,17 +76,15 @@ try:
         for p in prestadores:
             col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
             
-            # --- CORREÇÃO AQUI ---
-            # Vamos tentar pegar o Nome/Sobrenome, se for NULL, usamos o slug_unico
-            nome = p.get('Nome') or p.get('nome') or ""
-            sobrenome = p.get('Sobrenome') or p.get('sobrenome') or ""
-            identificador = f"{nome} {sobrenome}".strip()
+            # Tenta ler as chaves em minúsculas (nome e sobrenome)
+            nome_banco = p.get('nome') or p.get('Nome') or ""
+            sobrenome_banco = p.get('sobrenome') or p.get('Sobrenome') or ""
             
-            if not identificador:
-                identificador = p.get('slug_unico', 'Sem Nome')
+            nome_completo = f"{nome_banco} {sobrenome_banco}".strip()
             
-            col1.write(identificador) 
-            col2.write(p.get('referencia_pagamento') or "N/A")
+            # Se ainda estiver vazio, mostra o slug ou um aviso
+            col1.write(nome_completo if nome_completo else f"ID: {p.get('id')}")
+            col2.write(p.get('referencia_pagamento', ''))
             
             status = p.get('status_pagamento', False)
             
@@ -54,13 +92,10 @@ try:
                 col3.write("✅ PAGO")
                 inicio_str = p.get('inicio_servico')
                 if inicio_str:
-                    try:
-                        inicio = datetime.fromisoformat(inicio_str.replace('Z', '+00:00'))
-                        agora = datetime.now(timezone.utc)
-                        restante = 7200 - (agora - inicio).total_seconds()
-                        col4.write(f"⏳ {max(0, int(restante)//60)}m")
-                    except:
-                        col4.write("⏳ --")
+                    inicio = datetime.fromisoformat(inicio_str.replace('Z', '+00:00'))
+                    agora = datetime.now(timezone.utc)
+                    restante = 7200 - (agora - inicio).total_seconds()
+                    col4.write(f"⏳ {max(0, int(restante)//60)}m")
             else:
                 col3.write("❌ PENDENTE")
                 if col4.button("Confirmar Pagamento", key=f"btn_{p['id']}"):
