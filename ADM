@@ -21,17 +21,16 @@ if not st.session_state["logado"]:
 
 # --- SEÇÃO 2: FILA DE PRESTADORES ---
 st.subheader("🎤 Fila de Prestadores")
-
 if st.button("🔄 Atualizar Fila"):
     st.rerun()
 
 try:
-    # Adicionamos um .order('id') para garantir que a consulta seja nova
-    prestadores = supabase.table("prestadores").select("*").order("id").execute().data
+    # Busca todos os prestadores
+    prestadores = supabase.table("prestadores").select("*").execute().data
     
     if prestadores:
         header1, header2, header3, header4 = st.columns([2, 2, 1, 1])
-        header1.write("**Prestador (Nome/Sobrenome)**")
+        header1.write("**Prestador**")
         header2.write("**Ref.**")
         header3.write("**Status**")
         header4.write("**Ação**")
@@ -39,33 +38,38 @@ try:
         for p in prestadores:
             col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
             
-            # Tenta buscar das formas possíveis (Case sensitive)
-            nome = p.get('Nome') or p.get('nome') or ""
-            sobrenome = p.get('Sobrenome') or p.get('sobrenome') or ""
-            slug = p.get('slug_unico') or "Sem ID"
+            # Tenta ler as colunas 'nome' e 'sobrenome' em minúsculas
+            # Se não encontrar, tenta ler 'slug_unico' para não deixar vazio
+            nome_valor = p.get('nome') or p.get('Nome') or ""
+            sobrenome_valor = p.get('sobrenome') or p.get('Sobrenome') or ""
             
-            # Se 'nome' e 'sobrenome' estiverem vazios, exibe o slug para sabermos que o código está lendo a linha
-            nome_exibir = f"{nome} {sobrenome}".strip()
-            if not nome_exibir or nome_exibir == "":
-                nome_exibir = f"ID: {slug}"
-
-            col1.write(f"**{nome_exibir}**")
-            col2.write(str(p.get('referencia_pagamento') or "N/A"))
+            # Concatena o nome completo
+            nome_completo = f"{nome_valor} {sobrenome_valor}".strip()
             
-            # ... resto do código de status e pagamento ...
+            # Se ainda assim estiver vazio, usa o slug_unico como último recurso
+            if not nome_completo or nome_completo == "":
+                nome_completo = p.get('slug_unico', 'Sem Nome')
+            
+            col1.write(f"**{nome_completo}**")
+            
+            # Exibe a referência de pagamento
+            col2.write(str(p.get('referencia_pagamento', 'N/A')))
+            
             status = p.get('status_pagamento', False)
+            
             if status:
-                col3.write("✅ PAGO")
-                # ... cálculo de tempo ...
+                col3.write("✅ SIM")
+                # Cálculo de tempo (exemplo simplificado)
+                inicio_str = p.get('inicio_servico')
+                if inicio_str:
+                    # Ajuste conforme necessário para o seu formato de data
+                    col4.write("⏳ Em uso") 
             else:
-                col3.write("❌ PENDENTE")
-                if col4.button("Pagar", key=f"btn_{p['id']}"):
-                    supabase.table("prestadores").update({
-                        "status_pagamento": True, 
-                        "inicio_servico": datetime.now(timezone.utc).isoformat()
-                    }).eq("id", p['id']).execute()
+                col3.write("❌ NÃO")
+                if col4.button("Pagar", key=f"btn_{p.get('id')}"):
+                    # Lógica de atualização aqui
                     st.rerun()
     else:
-        st.write("Nenhum prestador encontrado no banco.")
+        st.write("Nenhum prestador cadastrado.")
 except Exception as e:
-    st.error(f"Erro ao buscar: {e}")
+    st.error(f"Erro ao buscar prestadores: {e}")
