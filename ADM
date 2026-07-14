@@ -1,72 +1,13 @@
-import streamlit as st
-from supabase import create_client
-from datetime import datetime, timezone
-
-# Configuração
-url = st.secrets["URL_SUPABASE"]
-key = st.secrets["KEY_SUPABASE"]
-supabase = create_client(url, key)
-
-st.set_page_config(page_title="Painel de Administração", layout="wide")
-st.title("🛡️ Painel de Controle")
-
-# --- LOGIN ---
-if "logado" not in st.session_state: st.session_state["logado"] = False
-if not st.session_state["logado"]:
-    senha = st.text_input("Senha:", type="password")
-    if st.button("Entrar") and senha == "1234":
-        st.session_state["logado"] = True
-        st.rerun()
-    st.stop()
-
-# --- SEÇÃO 2: FILA DE PRESTADORES ---
+# --- SEÇÃO 2: FILA DE PRESTADORES (COM DEPURADOR ATIVO) ---
 st.subheader("🎤 Fila de Prestadores")
-if st.button("🔄 Atualizar Fila"):
-    st.rerun()
 
 try:
-    # Busca os dados do Supabase
+    # Busca os dados
     prestadores = supabase.table("prestadores").select("*").execute().data
     
     if prestadores:
-        header1, header2, header3, header4 = st.columns([2, 2, 1, 1])
-        header1.write("**Prestador**")
-        header2.write("**Ref.**")
-        header3.write("**Status**")
-        header4.write("**Ação**")
-
-        for p in prestadores:
-            col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
-            
-            # --- DEPURAÇÃO (Se aparecerem dados estranhos na tela, o problema é o Supabase) ---
-            # st.write(p) # Descomente esta linha se ainda não aparecer nada para ver o que vem do banco
-
-            # Tenta ler as chaves conforme aparecem no seu esquema
-            nome_val = p.get('Nome') or p.get('nome') or ""
-            sobrenome_val = p.get('Sobrenome') or p.get('sobrenome') or ""
-            
-            nome_completo = f"{nome_val} {sobrenome_val}".strip()
-            display_name = nome_completo if nome_completo else (p.get('slug_unico') or f"ID: {p.get('id')}")
-            
-            col1.write(f"**{display_name}**")
-            col2.write(str(p.get('referencia_pagamento') or "N/A"))
-            
-            status = p.get('status_pagamento', False)
-            if status:
-                col3.write("✅ SIM")
-                inicio_str = p.get('inicio_servico')
-                if inicio_str:
-                    col4.write("⏳ Em uso")
-            else:
-                col3.write("❌ NÃO")
-                # Lógica funcional do botão Pagar
-                if col4.button("Pagar", key=f"btn_{p.get('id')}"):
-                    supabase.table("prestadores").update({
-                        "status_pagamento": True,
-                        "inicio_servico": datetime.now(timezone.utc).isoformat()
-                    }).eq("id", p.get('id')).execute()
-                    st.rerun()
-    else:
-        st.write("Nenhum prestador cadastrado.")
-except Exception as e:
-    st.error(f"Erro ao buscar prestadores: {e}")
+        # --- AQUI ESTÁ O TRUQUE ---
+        st.write("Dados recebidos do Supabase (para depurar):")
+        st.json(prestadores) # Isso vai mostrar TUDO o que o Supabase entregou
+        
+        # ... (seu restante código abaixo) ...
