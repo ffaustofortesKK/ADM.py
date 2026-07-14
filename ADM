@@ -12,12 +12,53 @@ st.title("🛡️ Painel de Controle")
 
 # --- LOGIN ---
 if "logado" not in st.session_state: st.session_state["logado"] = False
+
 if not st.session_state["logado"]:
     senha = st.text_input("Senha:", type="password")
     if st.button("Entrar") and senha == "1234":
         st.session_state["logado"] = True
         st.rerun()
     st.stop()
+
+# --- SAIR ---
+if st.sidebar.button("Sair"):
+    st.session_state["logado"] = False
+    st.rerun()
+
+# --- SEÇÃO 1: PEDIDOS WEB ---
+st.subheader("📥 Pedidos Web Pendentes")
+if st.button("🔄 Atualizar Pedidos"):
+    st.rerun()
+
+try:
+    pedidos = supabase.table("pedidos_pendentes").select("*").eq("status", "pendente").execute().data
+    
+    if pedidos:
+        for p in pedidos:
+            col_a, col_b = st.columns([4, 1])
+            col_a.write(f"🎤 **{p.get('cantor', 'Sem nome')}** - 🎵 {p.get('musica', 'Sem nome')}")
+            
+            if col_b.button("Aprovar", key=f"aprove_{p['id']}"):
+                slug = p['cantor'].lower().replace(" ", "-")
+                
+                # Inserção explícita para garantir o preenchimento no banco
+                supabase.table("prestadores").insert({
+                    "nome": p.get('cantor', 'Desconhecido'), 
+                    "sobrenome": "",    
+                    "referencia_pagamento": p.get('musica', ''),
+                    "status_pagamento": False,
+                    "slug_unico": slug
+                }).execute()
+                
+                supabase.table("pedidos_pendentes").delete().eq("id", p['id']).execute()
+                st.success(f"Prestador {p['cantor']} adicionado!")
+                st.rerun()
+    else:
+        st.info("Nenhum pedido novo.")
+except Exception as e:
+    st.error(f"Erro ao buscar pedidos: {e}")
+
+st.divider()
 
 # --- SEÇÃO 2: FILA DE PRESTADORES ---
 st.subheader("🎤 Fila de Prestadores")
@@ -36,17 +77,20 @@ try:
         for p in prestadores:
             col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
             
-            # LÓGICA DE EXIBIÇÃO:
-            # Tenta pegar o nome. Se estiver vazio, pega o slug_unico.
-            nome_exibir = p.get('nome') if p.get('nome') else p.get('slug_unico')
+            # LÓGICA DE EXIBIÇÃO: Prioriza NOME, se não tiver, usa SLUG, se não tiver, usa CÓDIGO
+            nome = p.get('nome')
+            slug = p.get('slug_unico')
+            codigo = p.get('codigo_express')
             
-            col1.write(f"**{nome_exibir}**")
-            col2.write(str(p.get('referencia_pagamento') or "N/A"))
+            exibir_nome = nome if (nome and nome != "None") else (slug if slug else (codigo if codigo else "Sem Nome"))
+            
+            col1.write(f"**{exibir_nome}**")
+            col2.write(str(p.get('referencia_pagamento') or ""))
             
             status = p.get('status_pagamento', False)
+            
             if status:
                 col3.write("✅ PAGO")
-                # Cálculo do tempo...
                 inicio_str = p.get('inicio_servico')
                 if inicio_str:
                     try:
@@ -54,10 +98,11 @@ try:
                         agora = datetime.now(timezone.utc)
                         restante = 7200 - (agora - inicio).total_seconds()
                         col4.write(f"⏳ {max(0, int(restante)//60)}m")
-                    except: col4.write("---")
+                    except:
+                        col4.write("---")
             else:
                 col3.write("❌ PENDENTE")
-                if col4.button("Pagar", key=f"btn_{p['id']}"):
+                if col4.button("Confirmar Pagamento", key=f"btn_{p['id']}"):
                     supabase.table("prestadores").update({
                         "status_pagamento": True, 
                         "inicio_servico": datetime.now(timezone.utc).isoformat()
