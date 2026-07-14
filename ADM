@@ -36,9 +36,13 @@ try:
         for p in prestadores:
             col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
             
-            # LÓGICA DE EXIBIÇÃO:
-            # Tenta pegar o nome. Se estiver vazio, pega o slug_unico.
-            nome_exibir = p.get('nome') if p.get('nome') else p.get('slug_unico')
+            # CORREÇÃO: Usando 'Nome' e 'Sobrenome' (com maiúsculas conforme seu banco)
+            nome = p.get('Nome') if p.get('Nome') else ""
+            sobrenome = p.get('Sobrenome') if p.get('Sobrenome') else ""
+            
+            # Junta os nomes, se ambos estiverem vazios usa o slug_unico
+            nome_completo = f"{nome} {sobrenome}".strip()
+            nome_exibir = nome_completo if nome_completo != "" else p.get('slug_unico', 'Sem Nome')
             
             col1.write(f"**{nome_exibir}**")
             col2.write(str(p.get('referencia_pagamento') or "N/A"))
@@ -46,7 +50,6 @@ try:
             status = p.get('status_pagamento', False)
             if status:
                 col3.write("✅ PAGO")
-                # Cálculo do tempo...
                 inicio_str = p.get('inicio_servico')
                 if inicio_str:
                     try:
