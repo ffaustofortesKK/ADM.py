@@ -1,75 +1,50 @@
 import streamlit as st
-from supabase import create_client
-from datetime import datetime, timezone
+import qrcode
+import re
+from io import BytesIO
+import requests
 
-# --- Configuração ---
-url = st.secrets["URL_SUPABASE"]
-key = st.secrets["KEY_SUPABASE"]
-supabase = create_client(url, key)
+st.set_page_config(page_title="Painel do Prestador", layout="wide")
 
-st.set_page_config(page_title="Painel de Administração", layout="wide")
-st.title("🛡️ Painel de Controle")
+# URL BASE do Firebase
+BASE_URL = "https://grupoffkaraoke-default-rtdb.firebaseio.com"
+CLOUDINARY_CLOUD_NAME = "yhwgjh7g"
+
+# Função para normalizar nome da música
+def normalizar_nome(nome):
+    nome = nome.replace(".mp4", "")
+    nome = re.sub(r'[^\w\s]', '', nome)
+    nome = "_".join(nome.split())
+    return nome
+
+# Inicialização
+if "nome" not in st.session_state: st.session_state.nome = None
+if "slug" not in st.session_state: st.session_state.slug = None
 
 # --- LOGIN ---
-if "logado" not in st.session_state: st.session_state["logado"] = False
-if not st.session_state["logado"]:
-    senha = st.text_input("Senha:", type="password")
-    if st.button("Entrar") and senha == "1234":
-        st.session_state["logado"] = True
-        st.rerun()
-    st.stop()
-
-# --- SEÇÃO: FILA DE PRESTADORES ---
-st.subheader("🎤 Fila de Prestadores")
-
-if st.button("🔄 Atualizar Fila"):
-    st.rerun()
-
-try:
-    # Busca os dados do Supabase
-    response = supabase.table("prestadores").select("*").execute()
-    prestadores = response.data
+if st.session_state.nome is None:
+    st.title("🎤 Portal do Prestador")
+    nome_input = st.text_input("Nome:")
+    sobrenome_input = st.text_input("Sobrenome:") 
+    telef = st.text_input("Telefone:")
     
-    if prestadores:
-        # Cabeçalhos da tabela
-        header1, header2, header3, header4 = st.columns([2, 2, 1, 1])
-        header1.write("**Prestador**")
-        header2.write("**Ref.**")
-        header3.write("**Status**")
-        header4.write("**Ação**")
-
-        # Loop pelos prestadores
-        for p in prestadores:
-            # Chave única para cada botão baseada no ID único do Supabase
-            p_id = p.get('id')
+    if st.button("Entrar"):
+        if nome_input and sobrenome_input and telef:
+            slug_unico = f"{nome_input.lower()}-{sobrenome_input.lower()}"
             
-            col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
+            # --- ENVIO PARA O ADM (Firebase) ---
+            # Grava o prestador numa lista geral para o ADM ver
+            data_prestador = {
+                "nome": f"{nome_input} {sobrenome_input}",
+                "telefone": telef,
+                "slug_unico": slug_unico
+            }
+            # Usa o telefone como chave única para evitar duplicados
+            requests.put(f"{BASE_URL}/prestadores/{telef.replace(' ', '')}.json", json=data_prestador)
             
-            # Formatação segura dos nomes (evita erro de NoneType)
-            nome = str(p.get('Nome') or p.get('nome') or "")
-            sobrenome = str(p.get('Sobrenome') or p.get('sobrenome') or "")
-            display_name = f"{nome} {sobrenome}".strip() or p.get('slug_unico') or "Sem Nome"
-            
-            col1.write(f"**{display_name}**")
-            col2.write(str(p.get('referencia_pagamento') or "N/A"))
-            
-            status = p.get('status_pagamento', False)
-            
-            if status:
-                col3.write("✅ SIM")
-                col4.write("⏳ Em uso")
-            else:
-                col3.write("❌ NÃO")
-                # Botão com chave única absoluta
-                if col4.button("Pagar", key=f"btn_pagar_{p_id}"):
-                    # Atualiza o status no Supabase
-                    supabase.table("prestadores").update({
-                        "status_pagamento": True,
-                        "inicio_servico": datetime.now(timezone.utc).isoformat()
-                    }).eq("id", p_id).execute()
-                    # Recarrega a página para refletir a mudança
-                    st.rerun()
-    else:
-        st.info("Nenhum prestador na fila.")
-except Exception as e:
-    st.error(f"Erro ao carregar dados: {e}")
+            st.session_state.update({"nome": f"{nome_input} {sobrenome_input}", "slug": slug_unico})
+            st.rerun()
+else:
+    # ... (Restante do seu código permanece igual até o final)
+    st.title(f"Bem-vindo, {st.session_state.nome}!")
+    # ... (Restante do seu código)
